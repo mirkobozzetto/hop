@@ -1,0 +1,147 @@
+#!/bin/bash
+# Switch the default GitHub account for git and gh, and the secrets tied to it.
+# Accounts are the profiles install.sh writes from .env. Only the
+# ~/.gitconfig-active link and gh's active account are changed. Secret values
+# live in the macOS Keychain, profiles only list their names (env.var).
+set -euo pipefail
+
+PROFILES="${HOP_PROFILES:-$HOME/.config/hop}"
+ACTIVE="${HOP_ACTIVE:-$HOME/.gitconfig-active}"
+GH_HOST="${HOP_GH_HOST:-github.com}"
+KEYCHAIN_PREFIX="${HOP_KEYCHAIN_PREFIX:-hop}"
+
+profiles() {
+  for f in "$PROFILES"/*.gitconfig; do basename "$f" .gitconfig; done
+}
+
+active_profile() {
+  basename "$(readlink "$ACTIVE")" .gitconfig
+}
+
+require_profile() {
+  if [ ! -f "$PROFILES/$1.gitconfig" ]; then
+    echo "compte inconnu : $1 (disponibles : $(profiles | xargs))" >&2
+    exit 1
+  fi
+}
+
+field() {
+  git config -f "$PROFILES/$1.gitconfig" "$2"
+}
+
+profile_vars() {
+  git config -f "$PROFILES/$1.gitconfig" --get-all env.var || true
+}
+
+secret_get() {
+  security find-generic-password -a "$USER" -s "$KEYCHAIN_PREFIX:$1:$2" -w 2>/dev/null
+}
+
+secret_list() {
+  local profile=$1 name
+  for name in $(profile_vars "$profile"); do
+    if secret_get "$profile" "$name" >/dev/null; then
+      echo "$name : défini"
+    else
+      echo "$name : absent"
+    fi
+  done
+}
+
+secret_set() {
+  local name=$1 profile=${2:-$(active_profile)} value
+  require_profile "$profile"
+  if [[ ! $name =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
+    echo "nom invalide : $name (MAJUSCULES_ET_CHIFFRES)" >&2
+    exit 1
+  fi
+  read -rsp "valeur de $name pour $profile : " value
+  echo >&2
+  if [ -z "$value" ] || [[ $value == *[\"\\[:space:]]* ]]; then
+    echo "valeur vide ou avec guillemet, antislash ou espace : rien enregistré" >&2
+    exit 1
+  fi
+  # Fed through stdin so the value never shows up in the process list.
+  printf 'add-generic-password -U -a "%s" -s "%s" -w "%s"\n' \
+    "$USER" "$KEYCHAIN_PREFIX:$profile:$name" "$value" | security -i >/dev/null
+  if ! profile_vars "$profile" | grep -qxF "$name"; then
+    git config -f "$PROFILES/$profile.gitconfig" --add env.var "$name"
+  fi
+  echo "$name enregistré pour $profile dans le trousseau macOS."
+}
+
+print_env() {
+  local profile name value
+  profile=$(active_profile)
+  # Unset every declared name first so a switch never leaks the other
+  # account's values.
+  for p in $(profiles); do profile_vars "$p"; done | sort -u | sed 's/^/unset /'
+  for name in $(profile_vars "$profile"); do
+    if value=$(secret_get "$profile" "$name"); then
+      printf 'export %s=%q\n' "$name" "$value"
+    fi
+  done
+}
+
+status() {
+  local profile expected ssh_cmd ssh_login gh_active secrets
+  profile=$(active_profile)
+  expected=$(field "$profile" github.user)
+  ssh_cmd=$(git config core.sshCommand)
+  # ssh -T always exits 1 on GitHub, the login is in the greeting.
+  ssh_login=$(eval "$ssh_cmd -o ConnectTimeout=5 -T git@$GH_HOST" 2>&1 \
+    | sed -n 's/^Hi \([^!]*\)!.*/\1/p' || true)
+  gh_active=$(gh auth status --active -h "$GH_HOST" 2>&1 \
+    | sed -n 's/.*account \([^ ]*\).*/\1/p' | head -1 || true)
+  secrets=$(secret_list "$profile" | paste -sd, - | sed 's/,/, /g')
+
+  echo "Compte : $profile"
+  echo "Git    : $(git config user.email)"
+  echo "Clé    : $(echo "$ssh_cmd" | sed -n 's/.*-i \([^ ]*\).*/\1/p')"
+  echo "SSH    : ${ssh_login:-échec de connexion}"
+  echo "gh     : ${gh_active:-?}"
+  echo "Env    : ${secrets:-aucune variable}"
+  echo
+  if [ "$ssh_login" = "$expected" ] && [ "$gh_active" = "$expected" ]; then
+    echo "OK : GitHub te reconnaît comme $expected."
+  else
+    echo "ATTENTION : attendu $expected partout."
+    if [ "$(git config user.email)" != "$(field "$profile" user.email)" ]; then
+      echo "Ce dossier impose un autre compte (includeIf ou config du dépôt)."
+    fi
+  fi
+}
+
+use() {
+  require_profile "$1"
+  ln -sfn "$PROFILES/$1.gitconfig" "$ACTIVE"
+  local user
+  user=$(field "$1" github.user)
+  gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
+    || echo "gh : $user non connecté, lance gh auth login" >&2
+  status
+}
+
+case "${1:-}" in
+  status|s) status ;;
+  env) print_env ;;
+  secret)
+    case "${2:-ls}" in
+      ls) secret_list "${3:-$(active_profile)}" ;;
+      set) secret_set "${3:?usage : hop secret set NOM [compte]}" "${4:-}" ;;
+      *) echo "usage : hop secret [ls|set NOM] [compte]" >&2; exit 1 ;;
+    esac
+    ;;
+  "")
+    status
+    echo
+    current=$(active_profile)
+    # Esc makes fzf exit non-zero: leave without switching.
+    choice=$({ echo "$current"; profiles | grep -vxF "$current"; } \
+      | fzf --reverse --height=~10 --no-info --prompt="compte > " \
+          --header="actuel : $current · ↑↓ choisir · Entrée valider · Échap quitter") \
+      || exit 0
+    [ "$choice" = "$current" ] || { echo; use "$choice"; }
+    ;;
+  *) use "$1" ;;
+esac
