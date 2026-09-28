@@ -31,8 +31,8 @@ ssh_login() {
     | sed -n 's/^Hi \([^!]*\)!.*/\1/p'
 }
 
-original=$(basename "$(readlink "$ACTIVE")" .gitconfig)
-ssh_config_before=$(shasum "$HOME/.ssh/config")
+original=$(basename "$(git config -f "$ACTIVE" include.path)" .gitconfig)
+ssh_config_before=$(cksum "$HOME/.ssh/config" 2>/dev/null)
 
 for profile in "$PROFILES"/*.gitconfig; do
   name=$(basename "$profile" .gitconfig)
@@ -55,10 +55,10 @@ while read -r key profile; do
   mkdir -p "$probe" && git -C "$probe" init -q
   check "dossier $dir : email git" "$(field "$profile" user.email)" "$(git -C "$probe" config user.email)"
   check "dossier $dir : compte SSH" "$(field "$profile" github.user)" "$(ssh_login "$probe")"
-  trash "$probe"
+  rm -r "$probe"
 done < <(git config --global --get-regexp '^includeif\.gitdir:')
 
-check "~/.ssh/config inchangé" "$ssh_config_before" "$(shasum "$HOME/.ssh/config")"
+check "~/.ssh/config inchangé" "$ssh_config_before" "$(cksum "$HOME/.ssh/config" 2>/dev/null)"
 
 (cd "$HOME" && "$HOP" "$original" >/dev/null)
 echo "profil restauré : $original"
