@@ -22,7 +22,7 @@ active_profile() {
 
 require_profile() {
   if [ ! -f "$PROFILES/$1.gitconfig" ]; then
-    echo "compte inconnu : $1 (disponibles : $(profiles | xargs))" >&2
+    echo "unknown account: $1 (available: $(profiles | xargs))" >&2
     exit 1
   fi
 }
@@ -47,9 +47,9 @@ secret_list() {
   local profile=$1 name
   for name in $(profile_vars "$profile"); do
     if secret_get "$profile" "$name" >/dev/null; then
-      echo "$name : défini"
+      echo "$name set"
     else
-      echo "$name : absent"
+      echo "$name missing"
     fi
   done
 }
@@ -58,17 +58,17 @@ secret_set() {
   local name=$1 profile=${2:-$(active_profile)} value where
   require_profile "$profile"
   if [[ ! $name =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
-    echo "nom invalide : $name (MAJUSCULES_ET_CHIFFRES)" >&2
+    echo "invalid name: $name (UPPERCASE_AND_DIGITS)" >&2
     exit 1
   fi
-  read -rsp "valeur de $name pour $profile : " value
+  read -rsp "value of $name for $profile: " value
   echo >&2
   if [ -z "$value" ] || [[ $value == *[\"\\[:space:]]* ]]; then
-    echo "valeur vide ou avec guillemet, antislash ou espace : rien enregistré" >&2
+    echo "empty value, or one with a quote, backslash or space: nothing stored" >&2
     exit 1
   fi
   if [ -n "$KEYCHAIN" ]; then
-    where="le trousseau macOS"
+    where="the macOS Keychain"
     # Fed through stdin so the value never shows up in the process list.
     printf 'add-generic-password -U -a "%s" -s "%s" -w "%s"\n' \
       "$USER" "$KEYCHAIN_PREFIX:$profile:$name" "$value" | security -i >/dev/null
@@ -82,7 +82,7 @@ secret_set() {
   if ! profile_vars "$profile" | grep -qxF "$name"; then
     git config -f "$PROFILES/$profile.gitconfig" --add env.var "$name"
   fi
-  echo "$name enregistré pour $profile dans $where."
+  echo "$name stored for $profile in $where."
 }
 
 print_env() {
@@ -110,19 +110,19 @@ status() {
     | sed -n 's/.*account \([^ ]*\).*/\1/p' | head -1 || true)
   secrets=$(secret_list "$profile" | paste -sd, - | sed 's/,/, /g')
 
-  echo "Compte : $profile"
-  echo "Git    : $(git config user.email)"
-  echo "Clé    : $(echo "$ssh_cmd" | sed -n 's/.*-i \([^ ]*\).*/\1/p')"
-  echo "SSH    : ${ssh_login:-échec de connexion}"
-  echo "gh     : ${gh_active:-?}"
-  echo "Env    : ${secrets:-aucune variable}"
+  echo "Account: $profile"
+  echo "Git:     $(git config user.email)"
+  echo "Key:     $(echo "$ssh_cmd" | sed -n 's/.*-i \([^ ]*\).*/\1/p')"
+  echo "SSH:     ${ssh_login:-connection failed}"
+  echo "gh:      ${gh_active:-?}"
+  echo "Env:     ${secrets:-no variables}"
   echo
   if [ "$ssh_login" = "$expected" ] && [ "$gh_active" = "$expected" ]; then
-    echo "OK : GitHub te reconnaît comme $expected."
+    echo "OK: GitHub knows you as $expected."
   else
-    echo "ATTENTION : attendu $expected partout."
+    echo "WARNING: expected $expected everywhere."
     if [ "$(git config user.email)" != "$(field "$profile" user.email)" ]; then
-      echo "Ce dossier impose un autre compte (includeIf ou config du dépôt)."
+      echo "This folder forces another account (includeIf or repo config)."
     fi
   fi
 }
@@ -135,7 +135,7 @@ use() {
   local user
   user=$(field "$1" github.user)
   gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
-    || echo "gh : $user non connecté, lance gh auth login" >&2
+    || echo "gh: $user not logged in, run gh auth login" >&2
   status
 }
 
@@ -145,8 +145,8 @@ case "${1:-}" in
   secret)
     case "${2:-ls}" in
       ls) secret_list "${3:-$(active_profile)}" ;;
-      set) secret_set "${3:?usage : hop secret set NOM [compte]}" "${4:-}" ;;
-      *) echo "usage : hop secret [ls|set NOM] [compte]" >&2; exit 1 ;;
+      set) secret_set "${3:?usage: hop secret set NAME [account]}" "${4:-}" ;;
+      *) echo "usage: hop secret [ls|set NAME] [account]" >&2; exit 1 ;;
     esac
     ;;
   "")
@@ -157,11 +157,11 @@ case "${1:-}" in
     if command -v fzf >/dev/null; then
       # Esc makes fzf exit non-zero: leave without switching.
       choice=$(echo "$choices" \
-        | fzf --reverse --height=~10 --no-info --prompt="compte > " \
-            --header="actuel : $current · ↑↓ choisir · Entrée valider · Échap quitter") \
+        | fzf --reverse --height=~10 --no-info --prompt="account > " \
+            --header="current: $current · ↑↓ choose · Enter select · Esc quit") \
         || exit 0
     else
-      PS3="compte (numéro, Ctrl-D pour quitter) > "
+      PS3="account (number, Ctrl-D to quit) > "
       select choice in $choices; do [ -n "$choice" ] && break; done
       [ -n "${choice:-}" ] || exit 0
     fi
