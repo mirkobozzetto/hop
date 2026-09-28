@@ -13,20 +13,23 @@
 
 # hop
 
-Switch between GitHub accounts on a Mac with one word: git identity, SSH
-key, gh CLI and secrets, all at once.
+Switch between GitHub accounts with one word: git identity, SSH key, gh
+CLI and secrets, all at once. macOS, Linux, and Windows through Git Bash.
 
-## Setup
-
-Needs macOS, git, [gh](https://cli.github.com) logged in to every account
-(`gh auth login`), [fzf](https://github.com/junegunn/fzf), and one SSH key
-per account, added to that account on GitHub.
+## Install
 
 ```bash
-cp .env.example .env   # your accounts, stays on your machine
-./install.sh           # idempotent, rerun after editing .env
-./test.sh              # checks every account against GitHub
+curl -fsSL https://raw.githubusercontent.com/mirkobozzetto/hop/main/install.sh | bash
 ```
+
+It asks for your accounts (email, SSH key, GitHub login), then sets
+everything up. Run it again to update. Your answers stay in `~/.hop/.env`:
+edit it, then run `~/.hop/install.sh`.
+
+Needs git, [gh](https://cli.github.com) logged in to every account
+(`gh auth login`), and one SSH key per account, added to that account on
+GitHub. [fzf](https://github.com/junegunn/fzf) gives a nicer menu, not
+required.
 
 ## Usage
 
@@ -40,23 +43,20 @@ hop secret set NAME acme
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
-`ATTENTION`.
-
-Repos under `HOP_WORK_DIR` always use `HOP_WORK_ACCOUNT`, whatever the
-active account is.
+`ATTENTION`. Repos under `HOP_WORK_DIR` always use `HOP_WORK_ACCOUNT`.
+`./test.sh` checks every account against GitHub.
 
 ## Secrets
 
-Values live in the macOS Keychain (`hop:<account>:<NAME>`), profiles only
-list their names. Every zsh exports the active account's values, and
-`hop <account>` re-exports them in the current shell. Apps started before
-a switch keep the old values until restarted.
+On macOS values live in the Keychain, elsewhere in
+`~/.config/hop/<account>.secrets`, readable by you only. Every new shell
+exports the active account's values, and `hop <account>` re-exports them.
+Apps started before a switch keep the old values until restarted.
 
 ## Changed outside the repo
 
-- `~/.config/hop/<account>.gitconfig`: one profile per account, from `.env`
-- `~/.local/bin/hop` -> `bin/hop`
-- `~/.gitconfig-active` -> the active profile
+- `~/.config/hop/`: one git profile per account, and secrets off macOS
+- `~/.local/bin/hop`: runs `bin/hop`
+- `~/.gitconfig-active`: includes the active profile
 - `~/.gitconfig`: one `include` and one `includeIf` line
-- `~/.zshrc`: sources `shell/hop.zsh`
-- macOS Keychain: one item per secret
+- `~/.zshrc` or `~/.bashrc`: sources `shell/hop.sh`

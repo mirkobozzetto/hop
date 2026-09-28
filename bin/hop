@@ -1,21 +1,23 @@
 #!/bin/bash
 # Switch the default GitHub account for git and gh, and the secrets tied to it.
 # Accounts are the profiles install.sh writes from .env. Only the
-# ~/.gitconfig-active link and gh's active account are changed. Secret values
-# live in the macOS Keychain, profiles only list their names (env.var).
+# ~/.gitconfig-active include and gh's active account are changed. Secret
+# values live in the macOS Keychain, or elsewhere in <account>.secrets next
+# to the profiles, readable by you only. Profiles only list their names.
 set -euo pipefail
 
 PROFILES="${HOP_PROFILES:-$HOME/.config/hop}"
 ACTIVE="${HOP_ACTIVE:-$HOME/.gitconfig-active}"
 GH_HOST="${HOP_GH_HOST:-github.com}"
 KEYCHAIN_PREFIX="${HOP_KEYCHAIN_PREFIX:-hop}"
+KEYCHAIN=$(command -v security || true)
 
 profiles() {
   for f in "$PROFILES"/*.gitconfig; do basename "$f" .gitconfig; done
 }
 
 active_profile() {
-  basename "$(readlink "$ACTIVE")" .gitconfig
+  basename "$(git config -f "$ACTIVE" include.path)" .gitconfig
 }
 
 require_profile() {
@@ -34,7 +36,11 @@ profile_vars() {
 }
 
 secret_get() {
-  security find-generic-password -a "$USER" -s "$KEYCHAIN_PREFIX:$1:$2" -w 2>/dev/null
+  if [ -n "$KEYCHAIN" ]; then
+    security find-generic-password -a "$USER" -s "$KEYCHAIN_PREFIX:$1:$2" -w 2>/dev/null
+  else
+    sed -n "s/^$2=//p" "$PROFILES/$1.secrets" 2>/dev/null | grep .
+  fi
 }
 
 secret_list() {
@@ -49,7 +55,7 @@ secret_list() {
 }
 
 secret_set() {
-  local name=$1 profile=${2:-$(active_profile)} value
+  local name=$1 profile=${2:-$(active_profile)} value where
   require_profile "$profile"
   if [[ ! $name =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
     echo "nom invalide : $name (MAJUSCULES_ET_CHIFFRES)" >&2
@@ -61,13 +67,22 @@ secret_set() {
     echo "valeur vide ou avec guillemet, antislash ou espace : rien enregistré" >&2
     exit 1
   fi
-  # Fed through stdin so the value never shows up in the process list.
-  printf 'add-generic-password -U -a "%s" -s "%s" -w "%s"\n' \
-    "$USER" "$KEYCHAIN_PREFIX:$profile:$name" "$value" | security -i >/dev/null
+  if [ -n "$KEYCHAIN" ]; then
+    where="le trousseau macOS"
+    # Fed through stdin so the value never shows up in the process list.
+    printf 'add-generic-password -U -a "%s" -s "%s" -w "%s"\n' \
+      "$USER" "$KEYCHAIN_PREFIX:$profile:$name" "$value" | security -i >/dev/null
+  else
+    where="$PROFILES/$profile.secrets"
+    ( umask 077
+      { grep -v "^$name=" "$where" 2>/dev/null || true
+        printf '%s=%s\n' "$name" "$value"; } > "$where.tmp"
+      mv "$where.tmp" "$where" )
+  fi
   if ! profile_vars "$profile" | grep -qxF "$name"; then
     git config -f "$PROFILES/$profile.gitconfig" --add env.var "$name"
   fi
-  echo "$name enregistré pour $profile dans le trousseau macOS."
+  echo "$name enregistré pour $profile dans $where."
 }
 
 print_env() {
@@ -114,7 +129,9 @@ status() {
 
 use() {
   require_profile "$1"
-  ln -sfn "$PROFILES/$1.gitconfig" "$ACTIVE"
+  # A plain include file, not a symlink: Git Bash on Windows copies symlinks.
+  rm -f "$ACTIVE"
+  git config -f "$ACTIVE" include.path "$PROFILES/$1.gitconfig"
   local user
   user=$(field "$1" github.user)
   gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
@@ -136,11 +153,18 @@ case "${1:-}" in
     status
     echo
     current=$(active_profile)
-    # Esc makes fzf exit non-zero: leave without switching.
-    choice=$({ echo "$current"; profiles | grep -vxF "$current"; } \
-      | fzf --reverse --height=~10 --no-info --prompt="compte > " \
-          --header="actuel : $current · ↑↓ choisir · Entrée valider · Échap quitter") \
-      || exit 0
+    choices=$(echo "$current"; profiles | grep -vxF "$current")
+    if command -v fzf >/dev/null; then
+      # Esc makes fzf exit non-zero: leave without switching.
+      choice=$(echo "$choices" \
+        | fzf --reverse --height=~10 --no-info --prompt="compte > " \
+            --header="actuel : $current · ↑↓ choisir · Entrée valider · Échap quitter") \
+        || exit 0
+    else
+      PS3="compte (numéro, Ctrl-D pour quitter) > "
+      select choice in $choices; do [ -n "$choice" ] && break; done
+      [ -n "${choice:-}" ] || exit 0
+    fi
     [ "$choice" = "$current" ] || { echo; use "$choice"; }
     ;;
   *) use "$1" ;;
