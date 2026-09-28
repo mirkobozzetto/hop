@@ -1,3 +1,16 @@
+```
+                           h o p !
+                        .-~~~~~~~~~-.
+           _____      .'             '.          ___
+          |_____|    /                 \        (zzz)
+           (o_o)    /       \(^o^)/     \       (-_-)
+          <|###|>  /           |         \      /|~|\
+           _/ \_  /           / \         \     _/ \_
+      ~~~~~~~~~~~~~~~~                  ~~~~~~~~~~~~~~~~
+         wile@acme                        sleepy@wombat
+       "ship it by 5"                   "just one more nap"
+```
+
 # hop
 
 Switch between GitHub accounts on a Mac with one word: git identity, SSH
@@ -47,16 +60,3 @@ a switch keep the old values until restarted.
 - `~/.gitconfig`: one `include` and one `includeIf` line
 - `~/.zshrc`: sources `shell/hop.zsh`
 - macOS Keychain: one item per secret
-
-```
-                           h o p !
-                        .-~~~~~~~~~-.
-           _____      .'             '.          ___
-          |_____|    /                 \        (zzz)
-           (o_o)    /       \(^o^)/     \       (-_-)
-          <|###|>  /           |         \      /|~|\
-           _/ \_  /           / \         \     _/ \_
-      ~~~~~~~~~~~~~~~~                  ~~~~~~~~~~~~~~~~
-         wile@acme                        sleepy@wombat
-       "ship it by 5"                   "just one more nap"
-```
