@@ -14,7 +14,7 @@ ACTIVE="$HOME/.gitconfig-active"
 
 # Piped into bash there is no script file: fetch the repo, rerun from it.
 bootstrap() {
-  command -v git >/dev/null || { echo "git introuvable, installe-le d'abord." >&2; exit 1; }
+  command -v git >/dev/null || { echo "git not found, install it first." >&2; exit 1; }
   if [ -d "$HOP_HOME/.git" ]; then
     git -C "$HOP_HOME" pull -q --ff-only
   else
@@ -28,7 +28,7 @@ bootstrap() {
 ask() {
   local answer
   while :; do
-    printf '%s%s : ' "$2" "${3:+ [$3]}" >/dev/tty
+    printf '%s%s: ' "$2" "${3:+ [$3]}" >/dev/tty
     read -r answer </dev/tty || exit 1
     answer=${answer:-${3:-}}
     [ -n "$answer" ] || [ $# -ge 3 ] && break
@@ -38,18 +38,18 @@ ask() {
 
 write_env() {
   local accounts account prefix email key login work_dir work_account
-  echo "Configuration de hop. Entrée garde la valeur entre crochets." >/dev/tty
+  echo "Setting up hop. Enter keeps the value in brackets." >/dev/tty
   while :; do
-    ask accounts "Noms des comptes, séparés par des espaces (ex. work perso)"
+    ask accounts "Account names, separated by spaces (e.g. work personal)"
     printf '%s\n' $accounts | grep -qv '^[a-z][a-z0-9]*$' || break
-    echo "minuscules et chiffres uniquement, sans tiret." >/dev/tty
+    echo "lowercase letters and digits only, no dashes." >/dev/tty
   done
-  ask work_dir "Dossier dont les dépôts gardent toujours le même compte (vide : aucun)" ""
+  ask work_dir "Folder whose repos always use the same account (empty: none)" ""
   work_account=""
   if [ -n "$work_dir" ]; then
     work_dir="${work_dir%/}/"
     while :; do
-      ask work_account "Compte de ce dossier" "${accounts%% *}"
+      ask work_account "Account for this folder" "${accounts%% *}"
       case " $accounts " in *" $work_account "*) break ;; esac
     done
   fi
@@ -61,15 +61,15 @@ write_env() {
     printf 'HOP_WORK_ACCOUNT=%q\n' "$work_account"
   } > "$1"
   for account in $accounts; do
-    echo "Compte $account" >/dev/tty
-    ask email "  Email git"
-    ask key "  Clé SSH" "~/.ssh/id_ed25519_$account"
-    ask login "  Login GitHub"
+    echo "Account $account" >/dev/tty
+    ask email "  Git email"
+    ask key "  SSH key" "~/.ssh/id_ed25519_$account"
+    ask login "  GitHub login"
     prefix=$(echo "$account" | tr '[:lower:]' '[:upper:]')
     printf '\n%s_EMAIL=%q\n%s_SSH_KEY=%q\n%s_GITHUB=%q\n' \
       "$prefix" "$email" "$prefix" "$key" "$prefix" "$login" >> "$1"
   done
-  echo "Réponses enregistrées dans $1, modifiable à tout moment." >/dev/tty
+  echo "Answers saved in $1, edit it any time." >/dev/tty
 }
 
 rc_file() {
@@ -92,17 +92,17 @@ main() {
   for account in $HOP_ACCOUNTS; do
     prefix=$(echo "$account" | tr '[:lower:]' '[:upper:]')
     email=${prefix}_EMAIL key=${prefix}_SSH_KEY login=${prefix}_GITHUB
-    : "${!email:?$email manquant dans .env}" "${!key:?$key manquant dans .env}"
-    : "${!login:?$login manquant dans .env}"
+    : "${!email:?$email missing from .env}" "${!key:?$key missing from .env}"
+    : "${!login:?$login missing from .env}"
     # Only these keys are written: the env.var lines added by hop secret stay.
     git config -f "$PROFILES/$account.gitconfig" user.email "${!email}"
     git config -f "$PROFILES/$account.gitconfig" core.sshCommand \
       "ssh -i ${!key} -o IdentitiesOnly=yes"
     git config -f "$PROFILES/$account.gitconfig" github.user "${!login}"
     keyfile=${!key}
-    [ -f "${keyfile/#\~/$HOME}" ] || echo "clé absente pour $account :" \
-      "ssh-keygen -t ed25519 -f ${!key}, puis ajoute ${!key}.pub au compte" \
-      "GitHub ${!login}." >&2
+    [ -f "${keyfile/#\~/$HOME}" ] || echo "no SSH key for $account:" \
+      "ssh-keygen -t ed25519 -f ${!key}, then add ${!key}.pub to the GitHub" \
+      "account ${!login}." >&2
   done
 
   # A wrapper, not a symlink: Git Bash on Windows copies symlinks.
@@ -132,7 +132,7 @@ main() {
     grep -qxF "$line" "$rc" || printf '\n# hop account switcher\n%s\n' "$line" >> "$rc"
   fi
 
-  command -v gh >/dev/null || echo "gh introuvable, installe-le : https://cli.github.com" >&2
+  command -v gh >/dev/null || echo "gh not found, install it: https://cli.github.com" >&2
 
   # Keep the current account across reinstalls.
   current=$(git config -f "$ACTIVE" include.path 2>/dev/null || true)
@@ -140,7 +140,7 @@ main() {
   [ -f "$PROFILES/$current.gitconfig" ] || current=$HOP_DEFAULT
   "$root/bin/hop" "$current"
   echo
-  echo "hop est installé. Ouvre un nouveau terminal, puis tape hop."
+  echo "hop is installed. Open a new terminal, then type hop."
 }
 
 main "$@"

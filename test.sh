@@ -17,7 +17,7 @@ check() {
   if [ "$2" = "$3" ]; then
     echo "ok    $1"
   else
-    echo "ECHEC $1 : attendu '$2', obtenu '$3'"
+    echo "FAIL  $1: expected '$2', got '$3'"
     fail=1
   fi
 }
@@ -38,11 +38,11 @@ for profile in "$PROFILES"/*.gitconfig; do
   name=$(basename "$profile" .gitconfig)
   login=$(field "$profile" github.user)
   (cd "$HOME" && "$HOP" "$name" >/dev/null)
-  check "$name : email git" "$(field "$profile" user.email)" "$(git -C "$HOME" config user.email)"
-  check "$name : compte SSH" "$login" "$(ssh_login "$HOME")"
-  check "$name : compte gh" "$login" "$(gh api user -q .login)"
+  check "$name: git email" "$(field "$profile" user.email)" "$(git -C "$HOME" config user.email)"
+  check "$name: SSH account" "$login" "$(ssh_login "$HOME")"
+  check "$name: gh account" "$login" "$(gh api user -q .login)"
   for var in $(git config -f "$profile" --get-all env.var); do
-    check "$name : variable $var exportée" "1" "$("$HOP" env | grep -c "^export $var=")"
+    check "$name: $var exported" "1" "$("$HOP" env | grep -c "^export $var=")"
   done
 done
 
@@ -53,13 +53,13 @@ while read -r key profile; do
   profile=${profile/#\~/$HOME}
   probe="$dir$PROBE_NAME"
   mkdir -p "$probe" && git -C "$probe" init -q
-  check "dossier $dir : email git" "$(field "$profile" user.email)" "$(git -C "$probe" config user.email)"
-  check "dossier $dir : compte SSH" "$(field "$profile" github.user)" "$(ssh_login "$probe")"
+  check "folder $dir: git email" "$(field "$profile" user.email)" "$(git -C "$probe" config user.email)"
+  check "folder $dir: SSH account" "$(field "$profile" github.user)" "$(ssh_login "$probe")"
   rm -r "$probe"
 done < <(git config --global --get-regexp '^includeif\.gitdir:')
 
-check "~/.ssh/config inchangé" "$ssh_config_before" "$(cksum "$HOME/.ssh/config" 2>/dev/null)"
+check "~/.ssh/config unchanged" "$ssh_config_before" "$(cksum "$HOME/.ssh/config" 2>/dev/null)"
 
 (cd "$HOME" && "$HOP" "$original" >/dev/null)
-echo "profil restauré : $original"
+echo "restored account: $original"
 exit $fail

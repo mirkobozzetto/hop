@@ -43,7 +43,7 @@ hop secret set NAME acme
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
-`ATTENTION`. Repos under `HOP_WORK_DIR` always use `HOP_WORK_ACCOUNT`.
+`WARNING`. Repos under `HOP_WORK_DIR` always use `HOP_WORK_ACCOUNT`.
 `./test.sh` checks every account against GitHub.
 
 ## Secrets
