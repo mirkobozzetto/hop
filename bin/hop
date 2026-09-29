@@ -64,6 +64,13 @@ read_secret() {
   while IFS= read -rsn1 c; do
     case $c in
       "") break ;;
+      $'\e')
+        # Terminals that ignore the switch still send the paste codes.
+        IFS= read -rsn5 c
+        case $c in
+          "[200~" | "[201~") ;;
+          *) value+=$'\e'$c; printf '%*s' $((${#c} + 1)) '' | tr ' ' '*' >&2 ;;
+        esac ;;
       $'\x7f' | $'\b')
         if [ -n "$value" ]; then
           value=${value%?}
