@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hop ui draft</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0f0d;--panel:#0f1512;--border:#22302a;--text:#d6e4dc;--dim:#71857b;--faint:#34443c;--accent:#3ddc97;--accent2:#a78bfa;--ok:#3ddc97;--warn:#ffb454;--crit:#ff5c7a;--info:#5ccfe6;--sel:#15221c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text)}
+body{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:clamp(11px,.92vw,15px);line-height:1.5;overflow:hidden;user-select:none}
+body.crt::after{content:'';position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px)}
+#app{position:fixed;inset:0}
+.shell{height:100%;display:flex;flex-direction:column;padding:1.1em 2ch .5em}
+header{display:flex;justify-content:space-between;align-items:end}
+.logo{font-weight:800;line-height:1;font-size:1.4em}
+.chip{border:1px solid var(--border);border-radius:999px;padding:0 1ch;margin-left:1ch}
+.scan{height:1px;margin:.6em 0 1.3em;background:linear-gradient(90deg,var(--border) 40%,var(--accent) 50%,var(--border) 60%);background-size:300% 100%}
+main{flex:1;min-height:0;display:grid;grid-template-columns:30ch minmax(0,1fr) 54ch;gap:2ch}
+.panel{position:relative;border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:1.05em 1.4ch .7em;overflow:hidden}
+.panel.focus{border-color:var(--accent);box-shadow:0 0 28px -8px var(--accent)}
+.title{position:absolute;top:-.78em;left:1.4ch;padding:0 .7ch;background:linear-gradient(var(--bg) 55%,var(--panel) 55%);color:var(--dim)}
+.focus>.title{color:var(--accent)}
+.lv,.row{display:grid;cursor:pointer;border-radius:4px;padding:.1em 0;white-space:nowrap}
+.lv{grid-template-columns:1.6ch 1fr 8ch 3ch}
+.row{grid-template-columns:1.6ch 2.4ch 25ch 12ch minmax(0,1fr) 12ch}
+.row>span{overflow:hidden}
+.sel{background:var(--sel)}
+.head{color:var(--faint);font-size:.8em;letter-spacing:.14em;cursor:default}
+.dim{color:var(--dim)}.faint{color:var(--faint)}.small{font-size:.86em}
+.bar{color:var(--accent)}
+.masked{color:var(--dim)}.glyph{color:var(--accent2)}.fresh{color:var(--accent);text-shadow:0 0 8px var(--accent)}
+.hit{background:var(--accent);color:var(--bg);border-radius:2px}
+h4{margin:1.1em 0 .3em;font-size:.78em;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.vbox{border:1px solid var(--border);border-radius:6px;padding:.35em 1ch;margin:.2em 0 .4em;white-space:nowrap;overflow:hidden}
+.k{display:inline-block;min-width:2.2ch;text-align:center;padding:0 .5ch;border:1px solid var(--faint);border-radius:4px;color:var(--accent);cursor:pointer}
+footer{display:flex;justify-content:space-between;padding-top:.6em;color:var(--dim)}
+.search{margin-bottom:.5em;padding:.2em 1ch;border:1px dashed var(--faint);border-radius:5px}
+.toasts{position:fixed;right:2ch;bottom:3.2em;width:46ch;display:flex;flex-direction:column;gap:.7em}
+.toast{position:relative;background:var(--panel);border:1px solid var(--border);border-left:3px solid;border-radius:7px;padding:.5em 1.2ch .6em;overflow:hidden}
+.drain{position:absolute;left:0;bottom:0;height:2px}
+.lock{position:fixed;inset:0;display:grid;place-items:center;text-align:center;cursor:pointer;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--accent) 7%,var(--bg)),var(--bg) 60%)}
+.fp{line-height:1.05;font-size:1.25em;margin:1.2em 0;white-space:pre}
+</style>
+</head>
+<body class="crt">
+<div id="app"></div>
+<script>
+'use strict';
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const ease = x => 1 - Math.pow(1 - clamp01(x), 3);
+const pulse = (t, s) => (Math.sin(t * s) + 1) / 2;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function hash(a, b) { let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35); h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f); return (h ^ (h >>> 16)) >>> 0; }
+const GLYPHS = '▓▒░#%&@$*+=<>?/|§¤';
+const glyph = (seed, i, t) => GLYPHS[hash(seed * 131 + i, Math.floor(t * 26)) % GLYPHS.length];
+const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+const THEMES = {
+  forest: { bg: '#0b0f0d', panel: '#0f1512', border: '#22302a', text: '#d6e4dc', dim: '#71857b', faint: '#34443c', accent: '#3ddc97', accent2: '#a78bfa', ok: '#3ddc97', warn: '#ffb454', crit: '#ff5c7a', info: '#5ccfe6', sel: '#15221c' },
+  paper: { bg: '#f5f1e8', panel: '#fbf8f1', border: '#d9d0bd', text: '#1c2a22', dim: '#6b7a70', faint: '#cfc6b3', accent: '#1f6548', accent2: '#6d4bc3', ok: '#1f7a4d', warn: '#b7791f', crit: '#c53030', info: '#1d6f8a', sel: '#ebe3d1' },
+};
+const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+const mix = (a, b, p) => { const A = hex(a), B = hex(b); return '#' + A.map((x, i) => Math.round(x + (B[i] - x) * clamp01(p)).toString(16).padStart(2, '0')).join(''); };
+const rgba = (c, a) => `rgba(${hex(c).join(',')},${a})`;
+
+const LEVELS = [
+  { id: 0, name: 'all', kind: 'shared', parent: null },
+  { id: 1, name: 'mirko', kind: 'account', parent: 0 },
+  { id: 2, name: 'insovo', kind: 'client', parent: 1 },
+  { id: 3, name: 'perso', kind: 'client', parent: 1 },
+  { id: 4, name: 'gratiago', kind: 'account', parent: 0 },
+  { id: 5, name: 'jarvis', kind: 'client', parent: 4 },
+];
+const LV = id => LEVELS[id];
+const chainOf = id => { const c = []; for (let l = LV(id); l; l = l.parent == null ? null : LV(l.parent)) c.push(l.id); return c; };
+const path = id => LV(id).kind === 'client' ? LV(LV(id).parent).name + '/' + LV(id).name : LV(id).name;
+const PROV = { OpenAI: '#10a37f', Anthropic: '#d97757', Exa: '#6b8afd', Mistral: '#fa7a35', UptimeRobot: '#3bd671', Brevo: '#12b886', GitHub: '#9aa4b1', Google: '#5b9cf5', Stripe: '#7a73ff', Postgres: '#5a8fd0' };
+
+let nextId = 1;
+const S_ = (name, level, provider, value, health, note, extra = {}) => ({ id: nextId++, name, level, provider, value, health, note, latency: 120 + (nextId * 37) % 200, ...extra });
+const SECRETS = [
+  S_('EXA_API_KEY', 0, 'Exa', 'exa-DEMO-3f9a2c71-5b8e-4d1a-9c0f-7e2b6a4d8c15', 'ok', 'valid'),
+  S_('ANTHROPIC_API_KEY', 0, 'Anthropic', 'sk-ant-api03-DEMO-Qm7Xk2Vb9Nw4Rt8Ly1Hp6Zc3', 'ok', 'valid'),
+  S_('OPENAI_API_KEY', 1, 'OpenAI', 'sk-proj-DEMO-Ab12Cd34Ef56Gh78Ij90Kl12', 'warn', 'idle for 94 days'),
+  S_('UPTIMEROBOT_API_KEY', 1, 'UptimeRobot', 'u3811981-DEMO-9f8e7d6c5b4a3f2e1d0c', 'ok', 'valid'),
+  S_('UPTIMEROBOT_MONITOR_KEY', 1, 'UptimeRobot', 'm804125128-DEMO-0a7b28b7de4c', 'crit', 'monitor-only key, creates nothing'),
+  S_('OPENAI_API_KEY', 2, 'OpenAI', 'sk-proj-DEMO-Insovo9Xy8Wv7Ut6Sr5Qp4On3', 'ok', 'valid'),
+  S_('MISTRAL_API_KEY', 2, 'Mistral', 'DEMOmistral7Hq2Wd9Lp4Zx6Vb1Nm8Kc3', 'ok', 'valid'),
+  S_('BREVO_SMTP_LOGIN', 2, 'Brevo', 'DEMO91c2a3@smtp-brevo.com', 'warn', 'sender domain not authenticated'),
+  S_('BREVO_SMTP_KEY', 2, 'Brevo', 'xsmtpsib-DEMO-4e5f6a7b8c9d0e1f2a3b4c5d', 'warn', 'expires in 6 days'),
+  S_('GOOGLE_CALENDAR_SA', 2, 'Google', 'AIzaDEMO-SyBx7Qm2Kp9Lw4Nz8Vr1Ht6', 'ok', 'valid'),
+  S_('OPENAI_API_KEY', 3, 'OpenAI', 'sk-proj-DEMO-Perso2Aa3Bb4Cc5Dd6Ee7Ff8', 'ok', 'valid'),
+  S_('GITHUB_TOKEN', 4, 'GitHub', 'github_pat_DEMO_11AB22CD33EF44GH55IJ', 'crit', 'expired 2 days ago'),
+  S_('STRIPE_SECRET_KEY', 5, 'Stripe', 'sk_test_DEMO_51Hx9Kq2Lm8Wp4Rt6Yv', 'ok', 'valid'),
+  S_('DATABASE_URL', 5, 'Postgres', 'postgres://jarvis:DEMO-pw-7f3a@db.local:5432/jarvis', 'ok', 'valid'),
+];
+const mask = v => { const m = v.match(/^((?:[a-z]+[-_]){1,2})/i); return (m ? m[1] : v.slice(0, 3)) + '•'.repeat(10) + v.slice(-4); };
+
+const S = { t: 0, locked: true, phase: 'idle', phaseT: 0, unlockedAt: -9, focus: 'secrets', level: 2, sel: 0, search: '', searching: false, reveal: null, toasts: [], clip: null, theme: 'forest' };
+const TH = () => THEMES[S.theme];
+
+function rows() {
+  const chain = chainOf(S.level), seen = new Set(), out = [];
+  chain.forEach((lv, depth) => SECRETS.filter(s => s.level === lv).forEach(s => {
+    if (seen.has(s.name)) return;
+    seen.add(s.name);
+    const overrides = chain.slice(depth + 1).find(l => SECRETS.some(o => o.level === l && o.name === s.name));
+    out.push({ s, inherited: depth > 0 ? lv : null, overrides: overrides ?? null });
+  }));
+  const q = S.search.toLowerCase();
+  return out.filter(r => !q || r.s.name.toLowerCase().includes(q) || r.s.provider.toLowerCase().includes(q)).sort((a, b) => a.s.name.localeCompare(b.s.name));
+}
+
+function toast(title, kind, sub, ttl = 3.5) { S.toasts.push({ title, kind, sub, ttl, born: S.t }); if (S.toasts.length > 4) S.toasts.shift(); }
+
+function valueHtml(s, t) {
+  const rv = S.reveal && S.reveal.id === s.id ? S.reveal : null;
+  if (!rv) return `<span class="masked">${esc(mask(s.value))}</span>`;
+  return s.value.split('').map((c, i) => {
+    if (rv.hiding != null) {
+      const ht = rv.hiding + i * 0.012;
+      return t < ht ? esc(c) : t < ht + 0.12 ? `<span class="glyph">${esc(glyph(s.id, i, t))}</span>` : '<span class="masked">•</span>';
+    }
+    const rt = rv.start + 0.25 + i * 0.02;
+    return t < rt ? `<span class="glyph">${esc(glyph(s.id, i, t))}</span>` : t < rt + 0.15 ? `<span class="fresh">${esc(c)}</span>` : esc(c);
+  }).join('');
+}
+
+function hl(name) {
+  const q = S.search, i = q ? name.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  return i < 0 ? esc(name) : esc(name.slice(0, i)) + `<span class="hit">${esc(name.slice(i, i + q.length))}</span>` + esc(name.slice(i + q.length));
+}
+
+function header(t) {
+  const th = TH();
+  const logo = ['█▄▄ ▄▀▄ █▀▄', '█ █ ▀▄▀ █▀ '].map((row, r) => row.split('').map((c, i) => c === ' ' ? '&nbsp;' : `<span style="color:${mix(th.accent, th.accent2, pulse(t * 1.4 - i * 0.5 + r * 0.9, 1))}">${c}</span>`).join('')).join('<br>');
+  const clip = S.clip ? `<span class="chip" style="color:${th.info};border-color:${th.info}">⎘ ${esc(S.clip.name)} · ${Math.ceil(S.clip.clearAt - t)} s</span>` : '';
+  return `<header><div class="logo">${logo}</div><div>${clip}<span class="chip"><span style="color:${th.accent}">●</span> ${esc(path(S.level))}</span><span class="chip dim">unlocked</span></div></header><div class="scan" style="background-position:${(-t * 22) % 300}% 0"></div>`;
+}
+
+function levelsPanel() {
+  const th = TH();
+  const items = LEVELS.map(lv => {
+    const sel = S.level === lv.id, own = SECRETS.filter(s => s.level === lv.id).length;
+    const sib = LEVELS.filter(x => x.parent === lv.parent && x.kind === 'client');
+    const g = lv.kind === 'shared' ? `<span style="color:${th.accent2}">◆</span>` : lv.kind === 'account' ? `<span style="color:${th.accent}">●</span>` : `<span class="faint">&nbsp;&nbsp;${sib[sib.length - 1] === lv ? '└' : '├'}</span>`;
+    return `<div class="lv ${sel ? 'sel' : ''}" data-act="level:${lv.id}"><b class="bar">${sel ? '▌' : '&nbsp;'}</b><span>${g} ${lv.name}</span><span class="faint small">${lv.kind}</span><span class="dim">${own}</span></div>`;
+  }).join('');
+  const chain = chainOf(S.level).map((id, i) => `<span style="color:${i ? th.dim : th.accent}">${LV(id).name}</span>`).join(' <span class="faint">›</span> ');
+  return `<div class="panel ${S.focus === 'levels' ? 'focus' : ''}"><span class="title">levels</span>${items}<h4>resolution</h4>${chain}<div class="faint small">the nearest level wins</div></div>`;
+}
+
+function secretsPanel(t, rs) {
+  const th = TH();
+  const search = S.searching || S.search ? `<div class="search"><span style="color:${th.accent}">/</span> ${esc(S.search)}${S.searching && pulse(t, 8) > 0.5 ? '▌' : ''} <span class="dim">${rs.length} match</span></div>` : '';
+  const body = rs.map((r, i) => {
+    const s = r.s, c = th[s.health];
+    const dot = `<span style="color:${c};opacity:${s.health === 'crit' ? 0.35 + 0.65 * pulse(t, 6) : 1}">●</span>`;
+    const from = r.inherited != null ? `<span class="dim">↳ ${LV(r.inherited).name}</span>` : r.overrides != null ? `<span style="color:${th.accent2}">⤿ ${LV(r.overrides).name}</span>` : '';
+    return `<div class="row ${i === S.sel ? 'sel' : ''}" data-act="sel:${i}"><span class="bar">${i === S.sel ? '▌' : ''}</span><span>${dot}</span><span style="font-weight:600;color:${r.inherited != null ? th.dim : th.text}">${hl(s.name)}</span><span style="color:${PROV[s.provider]}">${s.provider}</span><span>${valueHtml(s, t)}</span><span>${from}</span></div>`;
+  }).join('') || '<div class="dim">nothing matches · Esc clears</div>';
+  return `<div class="panel ${S.focus === 'secrets' ? 'focus' : ''}"><span class="title">secrets · ${esc(path(S.level))}</span>${search}<div class="row head"><span></span><span></span><span>NAME</span><span>PROVIDER</span><span>VALUE</span><span>FROM</span></div>${body}</div>`;
+}
+
+function detailPanel(t, r) {
+  if (!r) return '<div class="panel"><span class="title">detail</span></div>';
+  const th = TH(), s = r.s, rv = S.reveal && S.reveal.id === s.id && S.reveal.hiding == null ? S.reveal : null;
+  let extra = '<span class="k" data-key="r">r</span> reveal &nbsp;<span class="k" data-key="y">y</span> copy';
+  if (rv) {
+    const left = Math.max(0, rv.hideAt - t), w = Math.round(left / 30 * 24);
+    const tid = t - rv.start < 0.9 ? `<span class="chip" style="color:${th.accent};border-color:${th.accent};margin:0 1ch 0 0">Touch ID ✓</span>` : '';
+    extra = `${tid}<span class="dim">hides in ${Math.ceil(left)} s</span> <span style="color:${th.accent2}">${'█'.repeat(w)}</span><span class="faint">${'─'.repeat(24 - w)}</span>`;
+  }
+  const res = chainOf(S.level).map(lv => {
+    const has = SECRETS.find(x => x.level === lv && x.name === s.name);
+    return has && has.id === s.id ? `<span style="color:${th.accent}">◉ ${LV(lv).name}</span>` : has ? `<span class="dim"><s>○ ${LV(lv).name}</s></span>` : `<span class="faint">· ${LV(lv).name}</span>`;
+  }).join(' <span class="faint">→</span> ');
+  const spark = Array.from({ length: 30 }, (_, i) => { const l = hash(s.id, i) % 8; const g = ease((t - S.unlockedAt - i * 0.02) / 0.5); return `<span style="color:${mix(th.faint, th.accent, l / 7)}">${'▁▂▃▄▅▆▇█'[Math.round(l * g)]}</span>`; }).join('');
+  return `<div class="panel"><span class="title" style="color:${PROV[s.provider]}">${esc(s.name)}</span>
+    <div><span style="color:${PROV[s.provider]}">■ ${s.provider}</span> <span class="dim">·</span> ${esc(path(s.level))}</div>
+    <h4>value</h4><div class="vbox">${valueHtml(s, t)}</div><div>${extra}</div>
+    <h4>health</h4><div><span style="color:${th[s.health]}">●</span> ${esc(s.note)}${s.health === 'ok' ? ` <span class="dim">· ${s.latency} ms</span>` : ''}</div>
+    <h4>usage · 30 days</h4><div style="font-size:1.15em;line-height:1.1">${spark}</div>
+    <h4>resolution here</h4><div>${res}</div></div>`;
+}
+
+function lockScreen(t) {
+  const th = TH();
+  const FP = ['    ▄▄▀▀▀▀▀▀▄▄    ', '  ▄▀  ▄▀▀▀▀▄  ▀▄  ', ' █  ▄▀ ▄▀▀▄ ▀▄  █ ', '█  █  █ ▄▄ █  █  █', '█  █  █ █  █  █  █', '█  ▀▄ ▀▄▀  █  █  █', ' █  ▀▄    ▄▀ ▄▀  █ ', '  ▀▄  ▀▀▀▀ ▄▀  ▄▀ ', '    ▀▀▄▄▄▄▀▀▀▀    '];
+  const p = S.phase === 'scan' ? clamp01((t - S.phaseT) / 1.2) : S.phase === 'done' ? 1 : 0;
+  const rowsH = FP.map((row, r) => {
+    const fb = (FP.length - 1 - r) / (FP.length - 1), line = S.phase === 'scan' && Math.abs(fb - p) < 0.1;
+    const c = S.phase === 'done' ? th.accent : line ? '#ffffff' : S.phase !== 'idle' && fb <= p ? th.accent : mix(th.faint, th.dim, pulse(t - r * 0.12, 2.2));
+    return `<div style="color:${c}">${esc(row)}</div>`;
+  }).join('');
+  const title = S.phase === 'done' ? `<span style="color:${th.accent}">✓ unlocked</span>` : S.phase === 'scan' ? `reading fingerprint ${SPIN[Math.floor(t * 12) % 10]}` : 'hop is locked';
+  return `<div class="lock"><div><div class="fp" style="filter:drop-shadow(0 0 ${6 + 10 * pulse(t, 2)}px ${rgba(th.accent, 0.35)})">${rowsH}</div><div style="font-size:1.2em">${title}</div><div class="dim">${S.phase === 'idle' ? 'Touch ID · <span class="k">Enter</span> or click' : '&nbsp;'}</div><div class="faint small">fake data · values never leave the Keychain</div></div></div>`;
+}
+
+function render(t) {
+  if (S.locked) return lockScreen(t);
+  const th = TH(), rs = rows();
+  S.sel = Math.min(S.sel, Math.max(0, rs.length - 1));
+  const pu = ease((t - S.unlockedAt) / 0.7);
+  const toasts = S.toasts.map(x => {
+    const a = t - x.born, tx = (1 - ease(a / 0.35)) * 110 + ease((a - x.ttl) / 0.3) * 110, c = th[x.kind];
+    return `<div class="toast" style="transform:translateX(${tx}%);border-left-color:${c}"><span style="color:${c}">${x.kind === 'ok' ? '✓' : 'i'}</span> ${esc(x.title)}<div class="dim small">${esc(x.sub)}</div><div class="drain" style="width:${clamp01(1 - a / x.ttl) * 100}%;background:${c}"></div></div>`;
+  }).join('');
+  const keys = [['j', 'move'], ['Tab', 'panel'], ['r', 'reveal'], ['y', 'copy'], ['/', 'search'], ['t', 'theme'], ['L', 'lock']];
+  return `<div class="shell" style="opacity:${pu};filter:blur(${(1 - pu) * 6}px)">${header(t)}<main>${levelsPanel()}${secretsPanel(t, rs)}${detailPanel(t, rs[S.sel])}</main><footer><div>${keys.map(([k, l]) => `<span class="k" data-key="${k}">${k}</span> ${l}`).join(' &nbsp;')}</div><div>${SECRETS.length} secrets · ${LEVELS.length} levels · draft</div></footer></div><div class="toasts">${toasts}</div>`;
+}
+
+function tick(t) {
+  S.t = t;
+  if (S.locked) {
+    if (S.phase === 'scan' && t - S.phaseT > 1.25) { S.phase = 'done'; S.phaseT = t; }
+    else if (S.phase === 'done' && t - S.phaseT > 0.55) { S.locked = false; S.unlockedAt = t; toast('Unlocked', 'ok', 'Touch ID · locks again with L'); }
+    return;
+  }
+  const rv = S.reveal;
+  if (rv) {
+    if (rv.hiding == null && t >= rv.hideAt) rv.hiding = t;
+    const s = SECRETS.find(x => x.id === rv.id);
+    if (rv.hiding != null && t > rv.hiding + s.value.length * 0.012 + 0.3) S.reveal = null;
+  }
+  if (S.clip && t >= S.clip.clearAt) { navigator.clipboard?.writeText('').catch(() => {}); toast('Clipboard cleared', 'info', S.clip.name + ' is gone from the clipboard'); S.clip = null; }
+  S.toasts = S.toasts.filter(x => t < x.born + x.ttl + 0.35);
+}
+
+function handleKey(k) {
+  if (S.locked) { if ((k === 'Enter' || k === ' ') && S.phase === 'idle') { S.phase = 'scan'; S.phaseT = S.t; } return true; }
+  if (S.searching) {
+    if (k === 'Escape') { S.searching = false; S.search = ''; }
+    else if (k === 'Enter') S.searching = false;
+    else if (k === 'Backspace') S.search = S.search.slice(0, -1);
+    else if (k.length === 1) { S.search += k; S.sel = 0; }
+    return true;
+  }
+  const rs = rows(), s = rs[S.sel]?.s;
+  switch (k) {
+    case 'Tab': S.focus = S.focus === 'levels' ? 'secrets' : 'levels'; return true;
+    case 'j': case 'ArrowDown': case 'k': case 'ArrowUp': {
+      const d = k === 'j' || k === 'ArrowDown' ? 1 : -1;
+      if (S.focus === 'levels') { S.level = Math.max(0, Math.min(LEVELS.length - 1, S.level + d)); S.sel = 0; }
+      else S.sel = Math.max(0, Math.min(rs.length - 1, S.sel + d));
+      return true;
+    }
+    case '/': S.searching = true; S.search = ''; S.focus = 'secrets'; return true;
+    case 'Escape': S.search = ''; S.reveal = null; return true;
+    case 'Enter': case 'r':
+      if (S.focus === 'levels' && k === 'Enter') { S.focus = 'secrets'; return true; }
+      if (s) S.reveal = S.reveal && S.reveal.id === s.id && S.reveal.hiding == null ? { ...S.reveal, hiding: S.t } : { id: s.id, start: S.t, hideAt: S.t + 30, hiding: null };
+      return true;
+    case 'y':
+      if (!s) return true;
+      navigator.clipboard?.writeText(s.value).catch(() => {});
+      S.clip = { name: s.name, clearAt: S.t + 30 };
+      toast('Copied ' + s.name, 'ok', 'clipboard clears in 30 s');
+      return true;
+    case 't': S.theme = S.theme === 'forest' ? 'paper' : 'forest'; applyTheme(); return true;
+    case 'L': S.locked = true; S.phase = 'idle'; S.reveal = null; return true;
+  }
+  return false;
+}
+
+document.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return; if (handleKey(e.key)) e.preventDefault(); });
+document.addEventListener('mousedown', e => {
+  if (S.locked) return handleKey('Enter');
+  const el = e.target.closest('[data-act],[data-key]');
+  if (!el) return;
+  if (el.dataset.key) return handleKey(el.dataset.key);
+  const [a, v] = el.dataset.act.split(':');
+  if (a === 'level') { S.level = +v; S.sel = 0; S.focus = 'levels'; }
+  if (a === 'sel') { if (S.sel === +v && S.focus === 'secrets') handleKey('r'); else { S.sel = +v; S.focus = 'secrets'; } }
+});
+
+function applyTheme() {
+  const th = TH();
+  for (const k in th) document.documentElement.style.setProperty('--' + k, th[k]);
+  document.body.classList.toggle('crt', S.theme === 'forest');
+}
+
+const $app = document.getElementById('app');
+let last = 0;
+function frame(ts) { tick(ts / 1000); if (ts - last > 30) { $app.innerHTML = render(ts / 1000); last = ts; } requestAnimationFrame(frame); }
+applyTheme();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
