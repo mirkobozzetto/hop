@@ -175,9 +175,15 @@ case "${1:-}" in
   env) print_env ;;
   secret)
     case "${2:-ls}" in
-      ls) secret_list "${3:-$(active_profile)}" ;;
+      ls|list)
+        if [ -n "${3:-}" ]; then
+          require_profile "$3"
+          secret_list "$3"
+        else
+          for p in $(profiles); do secret_list "$p" | sed "s/^/$p: /"; done
+        fi ;;
       set) secret_set "${3:?usage: hop secret set NAME [account]}" "${4:-}" ;;
-      *) echo "usage: hop secret [ls|set NAME] [account]" >&2; exit 1 ;;
+      *) echo "usage: hop secret [list|set NAME] [account]" >&2; exit 1 ;;
     esac
     ;;
   "")

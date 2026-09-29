@@ -37,7 +37,8 @@ required.
 hop            # show the current account, then pick one
 hop wombat     # switch to an account
 hop s          # status only
-hop secret             # secrets of the active account (names, never values)
+hop secret list        # secrets of every account (names, never values)
+hop secret list acme   # secrets of one account
 hop secret set NAME    # store a value, one * per character typed or pasted
 hop secret set NAME acme
 ```
