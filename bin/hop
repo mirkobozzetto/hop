@@ -54,6 +54,30 @@ secret_list() {
   done
 }
 
+# One * per character so a paste can be checked; backspace erases.
+# Bracketed paste is switched off during the prompt: a terminal that keeps it
+# wraps the pasted value in ESC[200~ ... ESC[201~, which ended up stored.
+read_secret() {
+  local c value="" start=$'\e[200~' end=$'\e[201~'
+  printf '%s' "$1" >&2
+  printf '\e[?2004l' >&2
+  while IFS= read -rsn1 c; do
+    case $c in
+      "") break ;;
+      $'\x7f' | $'\b')
+        if [ -n "$value" ]; then
+          value=${value%?}
+          printf '\b \b' >&2
+        fi ;;
+      *) value+=$c; printf '*' >&2 ;;
+    esac
+  done
+  echo >&2
+  value=${value//"$start"/}
+  value=${value//"$end"/}
+  REPLY=$value
+}
+
 secret_set() {
   local name=$1 profile=${2:-$(active_profile)} value where
   require_profile "$profile"
@@ -61,8 +85,8 @@ secret_set() {
     echo "invalid name: $name (UPPERCASE_AND_DIGITS)" >&2
     exit 1
   fi
-  read -rsp "value of $name for $profile: " value
-  echo >&2
+  read_secret "value of $name for $profile: "
+  value=$REPLY
   if [ -z "$value" ] || [[ $value == *[\"\\[:space:]]* ]]; then
     echo "empty value, or one with a quote, backslash or space: nothing stored" >&2
     exit 1
