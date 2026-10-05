@@ -187,17 +187,13 @@ case "${1:-}" in
     esac
     ;;
   ui)
-    if [ "$(uname -s)" != Darwin ]; then
-      echo "macOS only" >&2
-      exit 1
-    fi
-    root=$(cd "$(dirname "$0")/.." && pwd)
     if ! command -v hopla >/dev/null; then
-      echo "hopla is not installed: cargo install --path $root/hopla" >&2
+      echo "hopla is not installed:" >&2
+      echo "  curl -fsSL https://raw.githubusercontent.com/mirkobozzetto/hopla/main/install.sh | sh" >&2
       exit 1
     fi
     # hopla switches and creates accounts through this hop and its .env.
-    HOP_BIN="$0" HOP_ROOT="$root" exec hopla
+    HOP_BIN="$0" HOP_ROOT="$(cd "$(dirname "$0")/.." && pwd)" exec hopla
     ;;
   "")
     status
