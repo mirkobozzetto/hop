@@ -41,7 +41,7 @@ hop secret list        # secrets of every account (names, never values)
 hop secret list acme   # secrets of one account
 hop secret set NAME    # store a value, one * per character typed or pasted
 hop secret set NAME acme
-hop ui         # hopla: browse, reveal and copy secrets (macOS)
+hop ui         # hopla: browse and copy secrets (macOS)
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
@@ -65,7 +65,7 @@ cargo install --path ~/.hop/hopla
 ```
 
 Enter unlocks with Touch ID, or the session password. `j`/`k` move, Tab
-switches panel, `/` filters, `r` reveals for 30 s, `y` copies: the value
+switches panel, `/` filters, `y` copies. A value is never shown: it
 skips clipboard history apps and leaves the clipboard after 30 s or when
 hopla quits. `L` locks, and so do 5 minutes without a key. Read only:
 `hop secret set` stays the way to store a value. Touch ID guards the screen,
