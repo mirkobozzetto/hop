@@ -41,7 +41,7 @@ hop secret list        # secrets of every account (names, never values)
 hop secret list acme   # secrets of one account
 hop secret set NAME    # store a value, one * per character typed or pasted
 hop secret set NAME acme
-hop ui         # hopla: browse and copy secrets (macOS)
+hop ui         # hopla: the vault of secrets, in the terminal (macOS)
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
@@ -64,12 +64,20 @@ A full-screen vault for these secrets, macOS only. Install it once with
 cargo install --path ~/.hop/hopla
 ```
 
-Enter unlocks with Touch ID, or the session password. `j`/`k` move, Tab
-switches panel, `/` filters, `y` copies. A value is never shown: it
-skips clipboard history apps and leaves the clipboard after 30 s or when
-hopla quits. `L` locks, and so do 5 minutes without a key. Read only:
-`hop secret set` stays the way to store a value. Touch ID guards the screen,
-not the Keychain: any of your programs can still read these items.
+Enter unlocks with Touch ID, or the session password: the vault door
+opens and Lapla, the bank's bunny, tips his hat. Each account is a room of
+deposit boxes. ← → walk to the next room, ↑ ↓ pick a box, `/` searches.
+
+- `y` copies a value through a slot machine. A value is never shown: it
+  skips clipboard history apps and leaves the clipboard after 30 s or when
+  hopla quits.
+- Enter deposits a value in the selected box, typed blind, one `*` per
+  character; `n` adds a new box, `d` empties one. Same rules as
+  `hop secret set`.
+- `L` locks, and so do 5 minutes without a key.
+
+Lapla has a few surprises. Touch ID guards the screen, not the Keychain:
+any of your programs can still read these items.
 
 ## Changed outside the repo
 
