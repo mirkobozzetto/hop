@@ -41,7 +41,7 @@ hop secret list        # secrets of every account (names, never values)
 hop secret list acme   # secrets of one account
 hop secret set NAME    # store a value, one * per character typed or pasted
 hop secret set NAME acme
-hop ui         # hopla: the vault of secrets, in the terminal (macOS)
+hop ui         # hopla: accounts and secrets in one palette (macOS)
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
@@ -64,20 +64,24 @@ A full-screen vault for these secrets, macOS only. Install it once with
 cargo install --path ~/.hop/hopla
 ```
 
-Enter unlocks with Touch ID, or the session password: the vault door
-opens and Lapla, the bank's bunny, tips his hat. Each account is a room of
-deposit boxes. ← → walk to the next room, ↑ ↓ pick a box, `/` searches.
+Enter unlocks with Touch ID, or the session password. Then everything is
+one list you type into: accounts, their secrets, and actions such as
+`new account` or `status`. Enter does the obvious thing for the row:
+switch to an account, copy a secret, fill an empty one.
 
-- `y` copies a value through a slot machine. A value is never shown: it
-  skips clipboard history apps and leaves the clipboard after 30 s or when
-  hopla quits.
-- Enter deposits a value in the selected box, typed blind, one `*` per
-  character; `n` adds a new box, `d` empties one. Same rules as
-  `hop secret set`.
-- `L` locks, and so do 5 minutes without a key.
+- A value is never shown. A copy skips clipboard history apps and leaves
+  the clipboard after 30 s or when hopla quits.
+- `^n` adds a secret, `^e` replaces a value (typed blind, one `*` per
+  character, same rules as `hop secret set`), `^d` deletes, after Touch ID.
+- `^b` switches to the row's account, like `hop <account>`; `^s` shows
+  `hop s`.
+- `^a` creates an account: it goes in `.env`, the SSH key is made if
+  missing, `install.sh` runs, the public key is copied for GitHub, then
+  `gh auth login`. Removing an account keeps its secrets in the Keychain.
+- `^l` locks, and so do 5 minutes without a key. Esc quits.
 
-Lapla has a few surprises. Touch ID guards the screen, not the Keychain:
-any of your programs can still read these items.
+Lapla, the bank's bunny, watches from the corner. Touch ID guards the
+screen, not the Keychain: any of your programs can still read these items.
 
 ## Changed outside the repo
 
