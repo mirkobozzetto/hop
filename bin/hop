@@ -191,11 +191,13 @@ case "${1:-}" in
       echo "macOS only" >&2
       exit 1
     fi
+    root=$(cd "$(dirname "$0")/.." && pwd)
     if ! command -v hopla >/dev/null; then
-      echo "hopla is not installed: cargo install --path $(cd "$(dirname "$0")/.." && pwd)/hopla" >&2
+      echo "hopla is not installed: cargo install --path $root/hopla" >&2
       exit 1
     fi
-    exec hopla
+    # hopla switches and creates accounts through this hop and its .env.
+    HOP_BIN="$0" HOP_ROOT="$root" exec hopla
     ;;
   "")
     status
