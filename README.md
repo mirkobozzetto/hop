@@ -41,6 +41,7 @@ hop secret list        # secrets of every account (names, never values)
 hop secret list acme   # secrets of one account
 hop secret set NAME    # store a value, one * per character typed or pasted
 hop secret set NAME acme
+hop ui         # hopla: browse, reveal and copy secrets (macOS)
 ```
 
 Each switch asks GitHub over SSH who you are and ends with `OK` or
@@ -53,6 +54,22 @@ On macOS values live in the Keychain, elsewhere in
 `~/.config/hop/<account>.secrets`, readable by you only. Every new shell
 exports the active account's values, and `hop <account>` re-exports them.
 Apps started before a switch keep the old values until restarted.
+
+## hopla
+
+A full-screen vault for these secrets, macOS only. Install it once with
+[Rust](https://rustup.rs), then open it with `hop ui`:
+
+```bash
+cargo install --path ~/.hop/hopla
+```
+
+Enter unlocks with Touch ID, or the session password. `j`/`k` move, Tab
+switches panel, `/` filters, `r` reveals for 30 s, `y` copies: the value
+skips clipboard history apps and leaves the clipboard after 30 s or when
+hopla quits. `L` locks, and so do 5 minutes without a key. Read only:
+`hop secret set` stays the way to store a value. Touch ID guards the screen,
+not the Keychain: any of your programs can still read these items.
 
 ## Changed outside the repo
 

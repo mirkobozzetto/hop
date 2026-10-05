@@ -186,6 +186,17 @@ case "${1:-}" in
       *) echo "usage: hop secret [list|set NAME] [account]" >&2; exit 1 ;;
     esac
     ;;
+  ui)
+    if [ "$(uname -s)" != Darwin ]; then
+      echo "macOS only" >&2
+      exit 1
+    fi
+    if ! command -v hopla >/dev/null; then
+      echo "hopla is not installed: cargo install --path $(cd "$(dirname "$0")/.." && pwd)/hopla" >&2
+      exit 1
+    fi
+    exec hopla
+    ;;
   "")
     status
     echo
