@@ -87,7 +87,7 @@ rc_file() {
 main() {
   local src="${BASH_SOURCE[0]:-}"
   [ -n "$src" ] && [ -f "$(dirname "$src")/bin/hop" ] || bootstrap
-  local root account prefix email key login keyfile current rc line work_dir
+  local root account prefix email key login keyfile current rc line work_dir gh
   root="$(cd "$(dirname "$src")" && pwd)"
 
   [ -f "$root/.env" ] || write_env "$root/.env"
@@ -95,6 +95,8 @@ main() {
   . "$root/.env"
 
   mkdir -p "$PROFILES" "$BIN_DIR"
+  # Full path: git started outside a shell (an editor) may lack gh in PATH.
+  printf -v gh '%q' "$(command -v gh || echo gh)"
   for account in $HOP_ACCOUNTS; do
     prefix=$(echo "$account" | tr '[:lower:]' '[:upper:]')
     email=${prefix}_EMAIL key=${prefix}_SSH_KEY login=${prefix}_GITHUB
@@ -105,6 +107,13 @@ main() {
     git config -f "$PROFILES/$account.gitconfig" core.sshCommand \
       "ssh -i ${!key} -o IdentitiesOnly=yes"
     git config -f "$PROFILES/$account.gitconfig" github.user "${!login}"
+    # HTTPS remotes get the account's token from gh, as SSH gets its key.
+    # The empty helper drops those set before it (store, osxkeychain).
+    git config -f "$PROFILES/$account.gitconfig" --replace-all \
+      credential.https://github.com.helper ""
+    git config -f "$PROFILES/$account.gitconfig" --add \
+      credential.https://github.com.helper \
+      "!t=\$($gh auth token -h github.com -u ${!login}) && GH_TOKEN=\$t $gh auth git-credential"
     keyfile=${!key}
     [ -f "${keyfile/#\~/$HOME}" ] || echo "no SSH key for $account:" \
       "ssh-keygen -t ed25519 -f ${!key}, then add ${!key}.pub to the GitHub" \
@@ -122,7 +131,13 @@ main() {
   fi
   if [ -n "${HOP_REPO_ACCOUNT:-}" ]; then
     git -C "$root" config include.path "$PROFILES/$HOP_REPO_ACCOUNT.gitconfig"
+    # The commit guard and the shells read the account from .hop.
+    echo "$HOP_REPO_ACCOUNT" > "$root/.hop"
   fi
+  # Refuses a commit whose author is not the folder's account. A config hook
+  # (git 2.54+) runs next to the repo's own hooks, never instead of them.
+  git config --global hook.hop.event pre-commit
+  git config --global hook.hop.command '~/.local/bin/hop guard'
   # Shells follow the .hop file, git started outside a shell (an editor) the
   # includeIf.
   if [ -n "${HOP_WORK_DIR:-}" ]; then
