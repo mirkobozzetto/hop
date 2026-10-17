@@ -3,6 +3,8 @@
 # verifies git, ssh and gh, checks the includeIf folder rules, then restores
 # the profile that was active before.
 set -uo pipefail
+# Run from a hop shell, check the machine, not that shell's account.
+unset GH_TOKEN GIT_CONFIG_COUNT HOP_ACTIVE
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 HOP="$ROOT/bin/hop"

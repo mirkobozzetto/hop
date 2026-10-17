@@ -1,13 +1,16 @@
 #!/bin/bash
 # Switch the default GitHub account for git and gh, and the secrets tied to it.
 # Accounts are the profiles install.sh writes from .env. Only the
-# ~/.gitconfig-active include and gh's active account are changed. Secret
+# ~/.gitconfig-active include and gh's active account are changed. With
+# HOP_ACTIVE naming another include (one shell's), only that file changes and
+# gh keeps its account: the caller exports GH_TOKEN. Secret
 # values live in the macOS Keychain, or elsewhere in <account>.secrets next
 # to the profiles, readable by you only. Profiles only list their names.
 set -euo pipefail
 
 PROFILES="${HOP_PROFILES:-$HOME/.config/hop}"
-ACTIVE="${HOP_ACTIVE:-$HOME/.gitconfig-active}"
+GLOBAL_ACTIVE="$HOME/.gitconfig-active"
+ACTIVE="${HOP_ACTIVE:-$GLOBAL_ACTIVE}"
 GH_HOST="${HOP_GH_HOST:-github.com}"
 KEYCHAIN_PREFIX="${HOP_KEYCHAIN_PREFIX:-hop}"
 KEYCHAIN=$(command -v security || true)
@@ -133,6 +136,13 @@ status() {
   local profile expected ssh_cmd ssh_login gh_active secrets
   profile=$(active_profile)
   expected=$(field "$profile" github.user)
+  # One shell's include: its gh runs on the token that shell exports for the
+  # account, not yet updated right after hopla switched it.
+  if [ "$ACTIVE" != "$GLOBAL_ACTIVE" ]; then
+    GH_TOKEN=$(gh auth token -h "$GH_HOST" -u "$expected" 2>/dev/null) \
+      || echo "gh: $expected not logged in, run gh auth login" >&2
+    export GH_TOKEN
+  fi
   ssh_cmd=$(git config core.sshCommand)
   # ssh -T always exits 1 on GitHub, the login is in the greeting.
   ssh_login=$(eval "$ssh_cmd -o ConnectTimeout=5 -T git@$GH_HOST" 2>&1 \
@@ -163,10 +173,12 @@ use() {
   # A plain include file, not a symlink: Git Bash on Windows copies symlinks.
   rm -f "$ACTIVE"
   git config -f "$ACTIVE" include.path "$PROFILES/$1.gitconfig"
-  local user
-  user=$(field "$1" github.user)
-  gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
-    || echo "gh: $user not logged in, run gh auth login" >&2
+  if [ "$ACTIVE" = "$GLOBAL_ACTIVE" ]; then
+    local user
+    user=$(field "$1" github.user)
+    gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
+      || echo "gh: $user not logged in, run gh auth login" >&2
+  fi
   status
 }
 
@@ -185,6 +197,15 @@ case "${1:-}" in
       set) secret_set "${3:?usage: hop secret set NAME [account]}" "${4:-}" ;;
       *) echo "usage: hop secret [list|set NAME] [account]" >&2; exit 1 ;;
     esac
+    ;;
+  ui)
+    if ! command -v hopla >/dev/null; then
+      echo "hopla is not installed:" >&2
+      echo "  curl -fsSL https://raw.githubusercontent.com/mirkobozzetto/hopla/main/install.sh | sh" >&2
+      exit 1
+    fi
+    # hopla switches and creates accounts through this hop and its .env.
+    HOP_BIN="$0" HOP_ROOT="$(cd "$(dirname "$0")/.." && pwd)" exec hopla
     ;;
   "")
     status

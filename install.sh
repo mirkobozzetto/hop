@@ -4,7 +4,10 @@
 # or ./install.sh from a clone. Asks for the accounts when .env is missing,
 # writes one git profile per account, then wires git and the shell. Rerun it
 # after editing .env or moving the repo.
+# shellcheck disable=SC2088 # ~ is left for git and ssh to expand.
 set -euo pipefail
+# Run from a hop shell, act on the machine, not on that shell's account.
+unset GH_TOKEN GIT_CONFIG_COUNT HOP_ACTIVE
 
 REPO_URL="${HOP_REPO:-https://github.com/mirkobozzetto/hop.git}"
 HOP_HOME="${HOP_HOME:-$HOME/.hop}"
@@ -41,6 +44,7 @@ write_env() {
   echo "Setting up hop. Enter keeps the value in brackets." >/dev/tty
   while :; do
     ask accounts "Account names, separated by spaces (e.g. work personal)"
+    # shellcheck disable=SC2086 # one name per line
     printf '%s\n' $accounts | grep -qv '^[a-z][a-z0-9]*$' || break
     echo "lowercase letters and digits only, no dashes." >/dev/tty
   done
@@ -59,6 +63,7 @@ write_env() {
     echo "HOP_REPO_ACCOUNT="
     printf 'HOP_WORK_DIR=%q\n' "$work_dir"
     printf 'HOP_WORK_ACCOUNT=%q\n' "$work_account"
+    echo "HOP_CLAUDE="
   } > "$1"
   for account in $accounts; do
     echo "Account $account" >/dev/tty
@@ -82,10 +87,11 @@ rc_file() {
 main() {
   local src="${BASH_SOURCE[0]:-}"
   [ -n "$src" ] && [ -f "$(dirname "$src")/bin/hop" ] || bootstrap
-  local root account prefix email key login keyfile current rc line
+  local root account prefix email key login keyfile current rc line work_dir
   root="$(cd "$(dirname "$src")" && pwd)"
 
   [ -f "$root/.env" ] || write_env "$root/.env"
+  # shellcheck source=/dev/null
   . "$root/.env"
 
   mkdir -p "$PROFILES" "$BIN_DIR"
@@ -117,9 +123,15 @@ main() {
   if [ -n "${HOP_REPO_ACCOUNT:-}" ]; then
     git -C "$root" config include.path "$PROFILES/$HOP_REPO_ACCOUNT.gitconfig"
   fi
+  # Shells follow the .hop file, git started outside a shell (an editor) the
+  # includeIf.
   if [ -n "${HOP_WORK_DIR:-}" ]; then
     git config --global "includeIf.gitdir:$HOP_WORK_DIR.path" \
       "$PROFILES/$HOP_WORK_ACCOUNT.gitconfig"
+    work_dir=${HOP_WORK_DIR/#\~/$HOME}
+    work_dir=${work_dir%/}
+    mkdir -p "$work_dir"
+    [ -f "$work_dir/.hop" ] || echo "$HOP_WORK_ACCOUNT" > "$work_dir/.hop"
   fi
 
   # Exports the active profile's secrets in every new shell. A line left by
