@@ -58,8 +58,10 @@ Elsewhere, the default account applies.
 echo acme > ~/code/acme/.hop
 ```
 
-Git, the SSH key, gh and the secrets switch for this terminal only,
-checked at every prompt, in zsh and bash (Git Bash included). `hop wombat`
+Git, the SSH key, gh and the secrets switch for this terminal only, in
+zsh and bash (Git Bash included): zsh on every `cd`, bash at the next
+prompt, so in bash `cd repo && git push` still uses the account from
+before the `cd`. `hop wombat`
 changes this terminal until you `cd` into another account's folder, and
 leaves the other terminals alone. `hop -g wombat` changes the default:
 new terminals, terminals outside a `.hop` folder, and apps started

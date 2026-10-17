@@ -1,7 +1,8 @@
 # Sourced from ~/.zshrc or ~/.bashrc. Accounts follow the folder: the nearest
 # .hop above it names the account (~/code/acme/.hop says acme), elsewhere the
 # active hop account applies. Git, the SSH key, gh and the hop secrets switch
-# for this shell only, checked at every prompt. hop -g changes the default
+# for this shell only, on every cd in zsh and at every prompt in both shells
+# (bash has no cd hook). hop -g changes the default
 # for the whole machine. HOP_CLAUDE=1 in hop's .env gives every account its
 # own Claude Code login as well.
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
@@ -124,6 +125,8 @@ _hop_forget() { rm -f "$_hop_file"; }
 
 if [ -n "${ZSH_VERSION:-}" ]; then
   autoload -Uz add-zsh-hook
+  # On the cd itself: "cd repo && git push" pushes as that repo's account.
+  add-zsh-hook chpwd _hop_follow_dir
   add-zsh-hook precmd _hop_prompt
   add-zsh-hook zshexit _hop_forget
 else
