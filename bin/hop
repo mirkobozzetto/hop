@@ -1,13 +1,16 @@
 #!/bin/bash
 # Switch the default GitHub account for git and gh, and the secrets tied to it.
 # Accounts are the profiles install.sh writes from .env. Only the
-# ~/.gitconfig-active include and gh's active account are changed. Secret
+# ~/.gitconfig-active include and gh's active account are changed. With
+# HOP_ACTIVE naming another include (one shell's), only that file changes and
+# gh keeps its account: the caller exports GH_TOKEN. Secret
 # values live in the macOS Keychain, or elsewhere in <account>.secrets next
 # to the profiles, readable by you only. Profiles only list their names.
 set -euo pipefail
 
 PROFILES="${HOP_PROFILES:-$HOME/.config/hop}"
-ACTIVE="${HOP_ACTIVE:-$HOME/.gitconfig-active}"
+GLOBAL_ACTIVE="$HOME/.gitconfig-active"
+ACTIVE="${HOP_ACTIVE:-$GLOBAL_ACTIVE}"
 GH_HOST="${HOP_GH_HOST:-github.com}"
 KEYCHAIN_PREFIX="${HOP_KEYCHAIN_PREFIX:-hop}"
 KEYCHAIN=$(command -v security || true)
@@ -165,8 +168,15 @@ use() {
   git config -f "$ACTIVE" include.path "$PROFILES/$1.gitconfig"
   local user
   user=$(field "$1" github.user)
-  gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
-    || echo "gh: $user not logged in, run gh auth login" >&2
+  if [ "$ACTIVE" = "$GLOBAL_ACTIVE" ]; then
+    gh auth switch -h "$GH_HOST" -u "$user" >/dev/null 2>&1 \
+      || echo "gh: $user not logged in, run gh auth login" >&2
+  else
+    # Exported for the status below only; the shell sets its own after.
+    GH_TOKEN=$(gh auth token -h "$GH_HOST" -u "$user" 2>/dev/null) \
+      || echo "gh: $user not logged in, run gh auth login" >&2
+    export GH_TOKEN
+  fi
   status
 }
 
