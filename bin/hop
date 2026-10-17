@@ -38,6 +38,38 @@ profile_vars() {
   git config -f "$PROFILES/$1.gitconfig" --get-all env.var || true
 }
 
+# The account of a folder: the nearest .hop above it, as in hop.sh. An
+# account without a hop profile (a client that only lends Claude), or no
+# .hop at all, leaves the shell's account.
+folder_account() {
+  local dir=$1 account=""
+  while [ -n "$dir" ]; do
+    if [ -f "$dir/.hop" ]; then
+      read -r account < "$dir/.hop" || true
+      break
+    fi
+    dir=${dir%/*}
+  done
+  if [ -z "$account" ] || [ ! -f "$PROFILES/$account.gitconfig" ]; then
+    account=${HOP_GH_ACCOUNT:-$(active_profile)}
+  fi
+  echo "$account"
+}
+
+# git runs this before every commit (hook.hop, set by install.sh), next to
+# the repo's own hooks.
+guard() {
+  local account expected author
+  account=$(folder_account "$PWD")
+  [ -f "$PROFILES/$account.gitconfig" ] || return 0
+  expected=$(field "$account" user.email)
+  author=$(git var GIT_AUTHOR_IDENT | sed 's/.*<\(.*\)>.*/\1/')
+  [ "$author" != "$expected" ] || return 0
+  echo "hop: this folder commits as $account <$expected>, not <$author>." >&2
+  echo "hop: run hop $account, or git commit --no-verify to skip the check." >&2
+  return 1
+}
+
 secret_get() {
   if [ -n "$KEYCHAIN" ]; then
     security find-generic-password -a "$USER" -s "$KEYCHAIN_PREFIX:$1:$2" -w 2>/dev/null
@@ -185,6 +217,7 @@ use() {
 case "${1:-}" in
   status|s) status ;;
   env) print_env ;;
+  guard) guard ;;
   secret)
     case "${2:-ls}" in
       ls|list)

@@ -122,7 +122,13 @@ main() {
   fi
   if [ -n "${HOP_REPO_ACCOUNT:-}" ]; then
     git -C "$root" config include.path "$PROFILES/$HOP_REPO_ACCOUNT.gitconfig"
+    # The commit guard and the shells read the account from .hop.
+    echo "$HOP_REPO_ACCOUNT" > "$root/.hop"
   fi
+  # Refuses a commit whose author is not the folder's account. A config hook
+  # (git 2.54+) runs next to the repo's own hooks, never instead of them.
+  git config --global hook.hop.event pre-commit
+  git config --global hook.hop.command '~/.local/bin/hop guard'
   # Shells follow the .hop file, git started outside a shell (an editor) the
   # includeIf.
   if [ -n "${HOP_WORK_DIR:-}" ]; then
