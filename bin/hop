@@ -14,6 +14,7 @@ ACTIVE="${HOP_ACTIVE:-$GLOBAL_ACTIVE}"
 GH_HOST="${HOP_GH_HOST:-github.com}"
 KEYCHAIN_PREFIX="${HOP_KEYCHAIN_PREFIX:-hop}"
 KEYCHAIN=$(command -v security || true)
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 profiles() {
   for f in "$PROFILES"/*.gitconfig; do basename "$f" .gitconfig; done
@@ -38,22 +39,32 @@ profile_vars() {
   git config -f "$PROFILES/$1.gitconfig" --get-all env.var || true
 }
 
-# The account of a folder: the nearest .hop above it, as in hop.sh. An
-# account without a hop profile (a client that only lends Claude), or no
-# .hop at all, leaves the shell's account.
-folder_account() {
-  local dir=$1 account=""
+# The nearest .hop above a folder, if any, as in hop.sh.
+hop_file() {
+  local dir=$1
   while [ -n "$dir" ]; do
     if [ -f "$dir/.hop" ]; then
-      read -r account < "$dir/.hop" || true
+      echo "$dir/.hop"
       break
     fi
     dir=${dir%/*}
   done
+}
+
+# The account of a folder. An account without a hop profile (a client that
+# only lends Claude), or no .hop at all, leaves the shell's account.
+folder_account() {
+  local file account=""
+  file=$(hop_file "$1")
+  if [ -n "$file" ]; then read -r account < "$file" || true; fi
   if [ -z "$account" ] || [ ! -f "$PROFILES/$account.gitconfig" ]; then
     account=${HOP_GH_ACCOUNT:-$(active_profile)}
   fi
   echo "$account"
+}
+
+author_email() {
+  git var GIT_AUTHOR_IDENT | sed 's/.*<\(.*\)>.*/\1/'
 }
 
 # git runs this before every commit (hook.hop, set by install.sh), next to
@@ -63,7 +74,7 @@ guard() {
   account=$(folder_account "$PWD")
   [ -f "$PROFILES/$account.gitconfig" ] || return 0
   expected=$(field "$account" user.email)
-  author=$(git var GIT_AUTHOR_IDENT | sed 's/.*<\(.*\)>.*/\1/')
+  author=$(author_email)
   [ "$author" != "$expected" ] || return 0
   echo "hop: this folder commits as $account <$expected>, not <$author>." >&2
   echo "hop: run hop $account, or git commit --no-verify to skip the check." >&2
@@ -164,6 +175,95 @@ print_env() {
   done
 }
 
+ssh_key() {
+  echo "$1" | sed -n 's/.*-i \([^ ]*\).*/\1/p'
+}
+
+# The GitHub login an ssh command's key opens. ssh -T always exits 1 on
+# GitHub, the login is in the greeting.
+ssh_login() {
+  eval "$1 -o ConnectTimeout=5 -T git@$GH_HOST" 2>&1 \
+    | sed -n 's/^Hi \([^!]*\)!.*/\1/p' || true
+}
+
+ok() { echo "ok   $*"; }
+fix() { echo "fix  $*"; DOCTOR_FAIL=1; }
+
+# One line per check: ok, or what to fix. Never shows a token.
+doctor() {
+  local account where ver major minor p login key ssh_cmd seen token gh_login
+  local claude email
+  DOCTOR_FAIL=0
+  if [ -n "${HOP_GH_ACCOUNT:-}" ]; then
+    ok "shell: hop.sh loaded, this terminal is on $HOP_GH_ACCOUNT"
+  else
+    fix "shell: hop.sh not loaded here: run $ROOT/install.sh, then open a" \
+      "new terminal"
+  fi
+
+  ver=$(git version | sed 's/[^0-9]*\([0-9.]*\).*/\1/')
+  IFS=. read -r major minor _ <<< "$ver"
+  if [ -z "$(git config hook.hop.command)" ]; then
+    fix "guard: not set up: run $ROOT/install.sh"
+  elif (( major < 2 || (major == 2 && minor < 54) )); then
+    fix "guard: git $ver ignores it: install git 2.54 or later"
+  else
+    ok "guard: git checks the author before each commit"
+  fi
+
+  account=$(folder_account "$PWD")
+  where=$(hop_file "$PWD")
+  where=${where:-this terminal}
+  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    ok "folder: $account (from $where)"
+  elif guard 2>/dev/null; then
+    ok "folder: $account (from $where), git commits here as $(author_email)"
+  else
+    fix "folder: $account (from $where), but git commits here as" \
+      "$(author_email): run hop $account"
+  fi
+
+  claude=$(sed -n 's/^HOP_CLAUDE=//p' "$ROOT/.env" 2>/dev/null || true)
+  for p in $(profiles); do
+    login=$(field "$p" github.user)
+    ssh_cmd=$(field "$p" core.sshCommand)
+    key=$(ssh_key "$ssh_cmd")
+    if [ ! -f "${key/#\~/$HOME}" ]; then
+      fix "$p: no SSH key $key: ssh-keygen -t ed25519 -f $key, then add" \
+        "$key.pub to the GitHub account $login"
+    else
+      seen=$(ssh_login "$ssh_cmd")
+      if [ "$seen" = "$login" ]; then
+        ok "$p: GitHub knows $key as $login"
+      elif [ -n "$seen" ]; then
+        fix "$p: GitHub knows $key as $seen, not $login: give $p its own key"
+      else
+        fix "$p: GitHub does not know $key: add $key.pub to $login on" \
+          "https://github.com/settings/keys"
+      fi
+    fi
+    gh_login=""
+    if token=$(gh auth token -h "$GH_HOST" -u "$login" 2>/dev/null); then
+      gh_login=$(GH_TOKEN=$token gh api user -q .login 2>/dev/null || true)
+    fi
+    if [ "$gh_login" = "$login" ]; then
+      ok "$p: gh logged in as $login"
+    else
+      fix "$p: gh not logged in as $login: gh auth login -h $GH_HOST"
+    fi
+    if [ "$claude" = 1 ]; then
+      email=$(jq -r '.oauthAccount.emailAddress // empty' \
+        "$HOME/.claude-$p/.claude.json" 2>/dev/null || true)
+      if [ -n "$email" ]; then
+        ok "$p: Claude logged in as $email"
+      else
+        fix "$p: Claude not logged in: run claude in a $p folder, then /login"
+      fi
+    fi
+  done
+  return $DOCTOR_FAIL
+}
+
 status() {
   local profile expected ssh_cmd ssh_login gh_active secrets
   profile=$(active_profile)
@@ -176,16 +276,14 @@ status() {
     export GH_TOKEN
   fi
   ssh_cmd=$(git config core.sshCommand)
-  # ssh -T always exits 1 on GitHub, the login is in the greeting.
-  ssh_login=$(eval "$ssh_cmd -o ConnectTimeout=5 -T git@$GH_HOST" 2>&1 \
-    | sed -n 's/^Hi \([^!]*\)!.*/\1/p' || true)
+  ssh_login=$(ssh_login "$ssh_cmd")
   gh_active=$(gh auth status --active -h "$GH_HOST" 2>&1 \
     | sed -n 's/.*account \([^ ]*\).*/\1/p' | head -1 || true)
   secrets=$(secret_list "$profile" | paste -sd, - | sed 's/,/, /g')
 
   echo "Account: $profile"
   echo "Git:     $(git config user.email)"
-  echo "Key:     $(echo "$ssh_cmd" | sed -n 's/.*-i \([^ ]*\).*/\1/p')"
+  echo "Key:     $(ssh_key "$ssh_cmd")"
   echo "SSH:     ${ssh_login:-connection failed}"
   echo "gh:      ${gh_active:-?}"
   echo "Env:     ${secrets:-no variables}"
@@ -218,6 +316,7 @@ case "${1:-}" in
   status|s) status ;;
   env) print_env ;;
   guard) guard ;;
+  doctor) doctor ;;
   secret)
     case "${2:-ls}" in
       ls|list)
@@ -238,7 +337,7 @@ case "${1:-}" in
       exit 1
     fi
     # hopla switches and creates accounts through this hop and its .env.
-    HOP_BIN="$0" HOP_ROOT="$(cd "$(dirname "$0")/.." && pwd)" exec hopla
+    HOP_BIN="$0" HOP_ROOT="$ROOT" exec hopla
     ;;
   "")
     status
